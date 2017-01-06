@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="de0c28bd-d53d-4673-9e2b-c8e67c2fdfee" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/.gitignore" />
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/ignore/matmul.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/kernelPCA_Gaussian.py" afterPath="$PROJECT_DIR$/kernelPCA_Gaussian.py" />
-    </list>
+    <list default="true" id="de0c28bd-d53d-4673-9e2b-c8e67c2fdfee" name="Default" comment="" />
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
