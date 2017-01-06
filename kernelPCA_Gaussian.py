@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import matplotlib.cm as cm
 
+
 class kernelPCA:
     """
     KernelPCA class to define basic functionality.
@@ -61,7 +62,7 @@ class kernelPCA:
         :param C: sigma
         :return: value k(x,x') = exp(-||x - x'||² / C)
         """
-        return math.exp(-(np.linalg.norm(x - y) ** 2) / C)
+        return math.exp(-(np.linalg.norm((x - y), ord=2) ** 2) / C)
 
     def Gaussian_Kernel_Gram(self, dataset, C):
         """
@@ -101,10 +102,10 @@ class kernelPCA:
         :param L: eigen values
         :return: normalized vectors
         """
-        N = V.shape[0]
+        N, M = V.shape
         V_norm = np.zeros((V.shape), dtype=float)
-        for i in range(N):
-            V_norm[i] = V[i] / math.sqrt(abs(L[i]))
+        for i in range(M):
+            V_norm[:, i] = V[:, i] / math.sqrt(abs(L[i]))
 
         return V_norm
 
@@ -135,11 +136,12 @@ class kernelPCA:
         :return:
         """
         D, N = projection_kernel.shape
-        one_D = np.ones((D, D), dtype=int) / D
+        # one_D = np.ones((D, D), dtype=int) / D
         one_N = np.ones((N, N), dtype=int) / N
         one_DN = np.ones((D, N), dtype=int) / N
-        #K_centered = projection_kernel - np.dot(one_DN, K) - np.dot(projection_kernel, one_N) + np.dot(one_DN, np.dot(K, one_N))
-        K_centered = projection_kernel - np.dot(one_D, projection_kernel) - np.dot(projection_kernel, one_N) + np.dot(one_D, np.dot(projection_kernel, one_N))
+        K_centered = projection_kernel - np.dot(one_DN, K) - np.dot(projection_kernel, one_N) + np.dot(one_DN,
+                                                                                                       np.dot(K, one_N))
+        # K_centered = projection_kernel - np.dot(one_D, projection_kernel) - np.dot(projection_kernel, one_N) + np.dot(one_D, np.dot(projection_kernel, one_N))
         return K_centered
 
     def projection_contours(self, M, K, V, dataset, I, C, region, plt):
@@ -157,8 +159,8 @@ class kernelPCA:
 
         # create meshgrid
         XX_x, YY_y = np.meshgrid(np.linspace(region[0, 0], region[0, 1], M),
-                             np.linspace(region[1, 0], region[1, 1], M))
-        XX = XX_x.reshape([XX_x.shape[0]*XX_x.shape[1], 1])
+                                 np.linspace(region[1, 0], region[1, 1], M))
+        XX = XX_x.reshape([XX_x.shape[0] * XX_x.shape[1], 1])
         YY = YY_y.reshape([YY_y.shape[0] * YY_y.shape[1], 1])
         ZZ = np.column_stack([XX, YY])
 
@@ -166,31 +168,29 @@ class kernelPCA:
 
         projection_matrix_centered = self.projection_centering(K, projection_kernel)
 
-        projection_matrix = projection_matrix_centered * np.matrix(V[I]).transpose()
+        projection_matrix = projection_matrix_centered * np.matrix(V[:, I]).transpose()
 
         projection_matrix = projection_matrix.reshape([M, M])
-        IM = plt.imshow(projection_matrix, interpolation='bilinear', origin='lower', cmap=cm.Blues,
-                        extent=(region[0, 0], region[0, 1], region[1, 0], region[1, 1]))
-        CM = plt.contour(XX_x, YY_y, projection_matrix, linewidths=2)
-        #plot.colorbar(IM)
-        #plot.colorbar(CM, orientation='horizontal')
-
+        # IM = plt.imshow(projection_matrix, interpolation='bilinear', origin='lower', cmap=cm.Blues,
+        #                extent=(region[0, 0], region[0, 1], region[1, 0], region[1, 1]))
+        CS = plt.contourf(XX_x, YY_y, projection_matrix, cmap=cm.Blues, origin='lower')
+        CM = plt.contour(CS, levels=CS.levels[::1], linewidths=2, colors='r', hold='on', origin='lower')
+        # plot.colorbar(IM)
+        # plot.colorbar(CM, orientation='horizontal')
 
     def thread_func(self, M, K, j, V_n, data_training, region):
         """
         used only for threading
         :return:
         """
-        #ax1 = plot.subplot('24%d' % j)
-        plot.figure(j)
-        ax1 = plot.subplot('111')
-        ax1 = self.plot_data(dataset, ax1)
-        plot.hot()
+        ax1 = plot.subplot('24%d' % (j + 1))
+        # plot.figure(j)
+        # ax1 = plot.subplot('111')
         self.projection_contours(M, K, V_n, data_training, j, 0.1, region, ax1)
+        ax1 = self.plot_data(dataset, ax1)
         plot.xlim(region[0, :])
         plot.ylim(region[1, :])
         plot.title('eigenvalue %.2f' % abs(L[j]))
-        plot.show()
 
 
 if __name__ == "__main__":
@@ -198,30 +198,30 @@ if __name__ == "__main__":
     nDim = 2
     nPoints = 30
     C = 0.1
-    STD = 0.1 # standard deviation in each cluster
-    M = 20 # meshgrid points
+    STD = 0.1  # standard deviation in each cluster
+    M = 30  # meshgrid points
     max_eigVec = 8
 
     region = np.zeros((nDim, 2), dtype=float)
     region[0, :] = np.array([-1, 1], dtype=float)
-    region[1, :] = np.array([-1, 1], dtype=float)
+    region[1, :] = np.array([-0.5, 1.5], dtype=float)
 
     # mean = np.random.rand(nClusters, nDim)
     # mean[:, 0] = (mean[:,0] - 0.5) / np.ptp(region[0,:], axis=0)
     # mean[:, 1] = (mean[:, 1] - 0.5) / np.ptp(region[1, :], axis=0)
     mean = np.zeros((3, 2), dtype=float)
-    mean[0, :] = [-0.5, -0.5]
-    mean[1, :] = [0.5, -0.5]
-    mean[2, :] = [0, 0.5]
+    mean[0, :] = [-0.5, -0.2]
+    mean[1, :] = [0.0, 0.6]
+    mean[2, :] = [0.5, 0.0]
 
-    std = STD * np.eye(nDim).reshape([1, nDim, nDim]).repeat(nClusters, axis=0)
+    stdval = STD * np.eye(nDim, dtype=float).reshape([1, nDim, nDim]).repeat(nClusters, axis=0)
     kPCA = kernelPCA()
-    dataset = kPCA.create_gaussian_data(mean, std, nPoints, nClusters, nDim)
+    dataset = kPCA.create_gaussian_data(mean, stdval, nPoints, nClusters, nDim)
 
     data = dataset.reshape([nClusters * nPoints, nDim])
-    #selected = np.random.permutation(data.shape[0])
-    #train_idx, test_idx = selected[:math.floor(data.shape[0] * 0.8)], selected[math.floor(data.shape[0] * 0.8):]
-    #data_training, data_test = data[train_idx, :], data[test_idx, :]
+    # selected = np.random.permutation(data.shape[0])
+    # train_idx, test_idx = selected[:math.floor(data.shape[0] * 0.8)], selected[math.floor(data.shape[0] * 0.8):]
+    # data_training, data_test = data[train_idx, :], data[test_idx, :]
     data_training = data
 
     K = kPCA.Gaussian_Kernel_Gram(data_training, C)
@@ -229,24 +229,29 @@ if __name__ == "__main__":
     K_c = kPCA.Kernel_Centering(K)
 
     [L, U] = np.linalg.eig(K_c)
-
+    L = L.real
 
     sort_index = np.argsort(L, axis=0)
     sort_index = sort_index[::-1]
 
     L = L[sort_index]
-    U = U[sort_index]
+    U = U[:, sort_index]
 
     V_n = kPCA.normalize_eigVec(U, L)
 
-    # only take first 8 eigenvectors and plot contours where
-    jobs = []
+    # only take first 8 eigenvectors and plot contours on a grid where Projections are same
+
+    # For multiprocessing
+    # jobs = []
+    # for j in range(max_eigVec):
+    #     t = multiprocessing.Process(target=kPCA.thread_func, args=(M, K, j, V_n, data_training, region))
+    #     jobs.append(t)
+    #     t.start()
+    #
+    # for x in jobs:
+    #     x.join()
+
     for j in range(max_eigVec):
-        t = multiprocessing.Process(target=kPCA.thread_func, args=(M, K, j, V_n, data_training, region))
-        jobs.append(t)
-        t.start()
+        kPCA.thread_func(M, K, j, V_n, data_training, region)
 
-    for x in jobs:
-        x.join()
-
-    #plot.show()
+    plot.show()
