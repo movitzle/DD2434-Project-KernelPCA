@@ -109,22 +109,20 @@ class kernelPCA:
 
         return V_norm
 
-    def projection_kernel(self, dataset, mesh, C):
+    def projection_kernel(self, dataset, testset, C):
         """
         Return projection of a point x on vector Vi
-        :param V: eigenVectors
         :param dataset: dataset to calculate kernel
-        :param x: vector to project
-        :param i: projected on Vi
+        :param testset: test data vector to project
         :param C: sigma value
         :return: Projection value
         """
         N = dataset.shape[0]
-        D = mesh.shape[0]
+        D = testset.shape[0]
         K = np.zeros((D, N), dtype=float)
         for i in range(D):
             for j in range(N):
-                K[i, j] = self.Gaussian_Kernel(mesh[i], dataset[j], C)
+                K[i, j] = self.Gaussian_Kernel(testset[i], dataset[j], C)
 
         return K
 
@@ -192,27 +190,46 @@ class kernelPCA:
         plot.ylim(region[1, :])
         plot.title('eigenvalue %.2f' % abs(L[j]))
 
+    def normalized_eigenVectors(self, data_training, C):
+        """
+        Get normalized eigenvectors
+        :return:
+        """
+        K = self.Gaussian_Kernel_Gram(data_training, C)
+
+        K_c = self.Kernel_Centering(K)
+
+        [L, U] = np.linalg.eig(K_c)
+        L = L.real
+
+        sort_index = np.argsort(L, axis=0)
+        sort_index = sort_index[::-1]
+
+        L = L[sort_index]
+        U = U[:, sort_index]
+
+        return K, self.normalize_eigVec(U, L)
 
 if __name__ == "__main__":
     nClusters = 3
     nDim = 2
-    nPoints = 30
+    nPoints = 100
     C = 0.1
-    STD = 0.1  # standard deviation in each cluster
-    M = 30  # meshgrid points
+    STD = 0.6  # standard deviation in each cluster
+    M = 100  # meshgrid points
     max_eigVec = 8
 
     region = np.zeros((nDim, 2), dtype=float)
-    region[0, :] = np.array([-1, 1], dtype=float)
-    region[1, :] = np.array([-0.5, 1.5], dtype=float)
+    region[0, :] = np.array([-2, 2], dtype=float)
+    region[1, :] = np.array([-1.5, 2.5], dtype=float)
 
     # mean = np.random.rand(nClusters, nDim)
     # mean[:, 0] = (mean[:,0] - 0.5) / np.ptp(region[0,:], axis=0)
     # mean[:, 1] = (mean[:, 1] - 0.5) / np.ptp(region[1, :], axis=0)
     mean = np.zeros((3, 2), dtype=float)
-    mean[0, :] = [-0.5, -0.2]
-    mean[1, :] = [0.0, 0.6]
-    mean[2, :] = [0.5, 0.0]
+    mean[0, :] = [-1, -0.5]
+    mean[1, :] = [0.0, 1.6]
+    mean[2, :] = [1.5, 0.0]
 
     stdval = STD * np.eye(nDim, dtype=float).reshape([1, nDim, nDim]).repeat(nClusters, axis=0)
     kPCA = kernelPCA()
@@ -224,20 +241,7 @@ if __name__ == "__main__":
     # data_training, data_test = data[train_idx, :], data[test_idx, :]
     data_training = data
 
-    K = kPCA.Gaussian_Kernel_Gram(data_training, C)
-
-    K_c = kPCA.Kernel_Centering(K)
-
-    [L, U] = np.linalg.eig(K_c)
-    L = L.real
-
-    sort_index = np.argsort(L, axis=0)
-    sort_index = sort_index[::-1]
-
-    L = L[sort_index]
-    U = U[:, sort_index]
-
-    V_n = kPCA.normalize_eigVec(U, L)
+    K, V_n = kPCA.normalized_eigenVectors(data_training, C)
 
     # only take first 8 eigenvectors and plot contours on a grid where Projections are same
 
