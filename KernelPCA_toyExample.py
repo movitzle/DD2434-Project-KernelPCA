@@ -1,7 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plot
 from kernelPCA_Gaussian import kernelPCA
-import math
 
 class kPCA_toy:
     """
@@ -57,6 +55,8 @@ class kPCA_toy:
         z_kernel = self.zKernel(z_init)
         z_num = np.dot(np.multiply(gamma, z_kernel), self.training_data)
         z_den = np.sum(np.multiply(gamma, z_kernel), axis=1)
+        if len(np.where(z_den == 0)[0]) > 0:
+            print('divide by zero!')
         return np.divide(z_num, np.repeat(np.matrix(z_den).transpose(), self.nDim, axis=1))
 
     def kernelPCA_sum(self, nIterations):
@@ -69,6 +69,7 @@ class kPCA_toy:
 
         # approximate input
         gamma = self.gamma_weights(norm_vec, projection_matrix, self.max_eigVec)
+        np.random.seed(20)
         z_init = np.random.rand(self.nClusters * self.nTestPoints, self.nDim)
 
         for i in range(nIterations):
@@ -79,7 +80,7 @@ class kPCA_toy:
         mean_sqr_sum = 0
         for i in range(self.nClusters):
             for j in range(self.nTestPoints):
-                mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j] - mean[i], ord=2) ** 2)
+                mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
 
         return mean_sqr_sum
 
@@ -93,7 +94,7 @@ if __name__ == "__main__":
 
     var = 0.1
     max_eigVec = 8
-    nIterations = 10
+    nIterations = 2
     mean = np.random.uniform(-1, 1, nClusters*nDimension).reshape([nClusters, nDimension])
     var_matrix = np.zeros((nClusters, nDimension, nDimension), dtype=float)
     for j in range(nClusters):
