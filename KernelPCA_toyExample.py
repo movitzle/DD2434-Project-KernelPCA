@@ -1,110 +1,136 @@
 import numpy as np
-from kernelPCA_Gaussian import kernelPCA
+from kernelPCA_Class import Gaussian_Kernel,Linear_Kernel
+import sys
+from sklearn.decomposition import PCA
 
 class kPCA_toy:
     """
     Implementation of toy example in paper "Kernel PCA and De-Noising in feature space" by Mika et. al.
     """
-    def __init__(self, mean, var, C, nClusters, nTrainingPoints, nTestPoints, nDim, max_eigVec):
+    def __init__(self, mean, var, C, nClusters, nTrainingPoints, nTestPoints, nDim):
         self.name = "kPCA_toy_example"
         self.mean = mean
         self.var = var
         self.std = np.power(var, 0.5)
-        self.C = C
+        self.C = C*nDim #see first section under chap 4 k(x,y)=exp(-|x-y|/(cn))
         self.nClusters = nClusters
         self.nTrainingPoints = nTrainingPoints
         self.nTestPoints = nTestPoints
         self.nDim = nDim
-        self.max_eigVec = max_eigVec
-        self.kPCA = kernelPCA()
-        self.training_data = self.kPCA.create_gaussian_data(mean, self.std, nTrainingPoints, nClusters, nDim)\
+        self.kPCA_gaussian = Gaussian_Kernel()
+        self.kPCA_linear=Linear_Kernel()
+        self.training_data = self.kPCA_gaussian.create_gaussian_data(mean, self.std, nTrainingPoints, nClusters, nDim)\
                                 .reshape([nClusters*nTrainingPoints, nDim])
-        self.test_data = self.kPCA.create_gaussian_data(mean, self.std, nTestPoints, nClusters, nDim)\
+        self.test_data = self.kPCA_gaussian.create_gaussian_data(mean, self.std, nTestPoints, nClusters, nDim)\
                                 .reshape([nClusters*nTestPoints, nDim])
 
-    def gamma_weights(self, V, projection_matrix, nComponents):
+    def kernelPCA_sum_gaussian(self, max_eigVec_lst,threshold):
+        # create Projection matrix for all test points and for each max_eigVec
+        kGram, norm_vec = self.kPCA_gaussian.normalized_eigenVectors(self.training_data, self.C)
+        projection_kernel = self.kPCA_gaussian.projection_kernel(self.training_data, self.test_data, self.C)
+        projection_matrix_centered = self.kPCA_gaussian.projection_centering(kGram, projection_kernel)
+        mean_sqr_sum_lst=[]
+        for max_eigVec in max_eigVec_lst:
+            print(max_eigVec)
+            projection_matrix = np.dot(projection_matrix_centered, norm_vec[:, :max_eigVec])
+
+            # approximate input
+            gamma = self.kPCA_gaussian.gamma_weights(norm_vec, projection_matrix, max_eigVec)
+            #np.random.seed(20)
+            #z_init = np.random.rand(self.nClusters * self.nTestPoints, self.nDim)
+            z_init=self.test_data #according to first section under chapter 4,
+            # in de-noising we can use the test points as starting guess
+            z_init_old=np.zeros(z_init.shape)
+            max_distance=1
+            while max_distance>threshold:
+                z_init_old=z_init
+                z_init = self.kPCA_gaussian.approximate_input_data(gamma, z_init,self.training_data,self.C,self.nDim)
+                max_distance=max(np.linalg.norm(z_init-z_init_old,axis=1,ord=2))
+                #print(max_distance)
+            # calculate the mean square distance from cluster center of each point
+            z_proj = z_init
+            mean_sqr_sum = 0
+            for i in range(self.nClusters):
+                for j in range(self.nTestPoints):
+                    mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
+            mean_sqr_sum_lst.append(mean_sqr_sum)
+
+        return mean_sqr_sum_lst
+
+    def kernelPCA_sum_linear(self,max_eigVec_lst):
         """
-        Calculate Gamma for all dataset,
-        :param V: normalized vector (alpha_i),
-        :param projection_matrix: (T x n) Matrix of beta_k values for all test set,
-        :param nComponents: number of components in projection,
-        :return: Gamma_i = sum_k( alpha_i * beta_k)
+        De-noises test data using a Linear Kernel and direct projection
+        :param max_eigVec_lst: list of different number of principal components to be used
+        :return: list of the mean square distance for each trial using different max_eigVec
         """
-        return np.dot(projection_matrix, (V[:, :nComponents]).transpose())
 
-    def zKernel(self, z_init):
-        """
-        Calculate Gaussian kernel k(z_init, dataset)
-        :param z_init:
-        :return:
-        """
-        z_kernel = np.zeros((self.nClusters*self.nTestPoints, self.nClusters*self.nTrainingPoints), dtype=float)
-        for i in range(self.nClusters*self.nTestPoints):
-            for j in range(self.nClusters*self.nTrainingPoints):
-                z_kernel[i, j] = self.kPCA.Gaussian_Kernel(z_init[i, :], self.training_data[j, :], self.C)
+        #centering data
+        kGram, norm_vec = self.kPCA_linear.normalized_eigenVectors(self.training_data, self.C)
+        projection_kernel = self.kPCA_linear.projection_kernel(self.training_data, self.test_data, self.C)
+        projection_matrix_centered = self.kPCA_linear.projection_centering(kGram, projection_kernel)
 
-        return z_kernel
 
-    def approximate_input_data(self, gamma, z_init):
-        """
-        Return updated value of approximated input data z_(t+1)
-        :param gamma:
-        :param z_init:
-        :return:
-        """
-        z_kernel = self.zKernel(z_init)
-        z_num = np.dot(np.multiply(gamma, z_kernel), self.training_data)
-        z_den = np.sum(np.multiply(gamma, z_kernel), axis=1)
-        if len(np.where(z_den == 0)[0]) > 0:
-            print('divide by zero!')
-        return np.divide(z_num, np.repeat(np.matrix(z_den).transpose(), self.nDim, axis=1))
+        mean_sqr_sum_lst=[]
+        for max_eigVec in max_eigVec_lst:
+            projection_matrix = np.dot(projection_matrix_centered, norm_vec[:, :max_eigVec])
 
-    def kernelPCA_sum(self, nIterations):
+            z_proj=self.kPCA_linear.approximate_input_data(norm_vec[:, :max_eigVec],self.training_data,projection_matrix)
+            mean_sqr_sum = 0
+            for i in range(self.nClusters):
+                for j in range(self.nTestPoints):
+                    mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
+            mean_sqr_sum_lst.append(mean_sqr_sum)
+        return mean_sqr_sum_lst
 
-        # create Projection matrix for all test points
-        kGram, norm_vec = self.kPCA.normalized_eigenVectors(self.training_data, self.C)
-        projection_kernel = self.kPCA.projection_kernel(self.training_data, self.test_data, self.C)
-        projection_matrix_centered = self.kPCA.projection_centering(kGram, projection_kernel)
-        projection_matrix = np.dot(projection_matrix_centered, norm_vec[:, :self.max_eigVec])
+    def linearPCA(self,max_eigVec_lst):
+        mean_sqr_sum_lst=[]
 
-        # approximate input
-        gamma = self.gamma_weights(norm_vec, projection_matrix, self.max_eigVec)
-        np.random.seed(20)
-        z_init = np.random.rand(self.nClusters * self.nTestPoints, self.nDim)
+        for max_eigVec in max_eigVec_lst:
 
-        for i in range(nIterations):
-            z_init = self.approximate_input_data(gamma, z_init)
+            pca = PCA(n_components=max_eigVec)
+            pca.fit(self.training_data)
+            z_proj=pca.transform(self.test_data)
+            mean_sqr_sum = 0
+            for i in range(self.nClusters):
+                for j in range(self.nTestPoints):
+                    mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
+            mean_sqr_sum_lst.append(mean_sqr_sum)
+        return mean_sqr_sum_lst
 
-        # calculate the mean square distance from cluster center of each point
-        z_proj = z_init
-        mean_sqr_sum = 0
-        for i in range(self.nClusters):
-            for j in range(self.nTestPoints):
-                mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
-
-        return mean_sqr_sum
 
 if __name__ == "__main__":
+    std=float(sys.argv[1])
+    results=[]
     # create data
     # choose mean uniformly between [-1,1]
     nDimension = 10
     nClusters = 11
     nTrainingPoints = 100
     nTestPoints = 33
-
-    var = 0.1
-    max_eigVec = 8
-    nIterations = 2
+    max_eigVec_lst = [1,2,3,4,5,6,7,8,9]
+    convergence_threshold=0.1
     mean = np.random.uniform(-1, 1, nClusters*nDimension).reshape([nClusters, nDimension])
+    var = std ** 2
     var_matrix = np.zeros((nClusters, nDimension, nDimension), dtype=float)
+    # create class object
     for j in range(nClusters):
         var_matrix[j, :, :] = (var * np.eye(nDimension, dtype=float))
+    kPCAtoy = kPCA_toy(mean, var_matrix, 2 * var, nClusters, nTrainingPoints, nTestPoints, nDimension)
 
-    # create class object
 
-    kPCAtoy = kPCA_toy(mean, var_matrix, 2 * var, nClusters, nTrainingPoints, nTestPoints, nDimension, max_eigVec)
-    mean_sqr_sum = kPCAtoy.kernelPCA_sum(nIterations)
 
-    print("Sum= %f, var=%f, max_eigVec=%d" % (mean_sqr_sum, var, max_eigVec))
+    sqr_sum_lst_gaussian = kPCAtoy.kernelPCA_sum_gaussian(max_eigVec_lst,convergence_threshold)
+    sqr_sum__lst_linear=kPCAtoy.linearPCA(max_eigVec_lst)
 
+    #print("Sum= %f, std=%f, max_eigVec=%d" % (sqr_sum_gaussian, std, max_eigVec))
+    #print("Sum= %f, std=%f, max_eigVec=%d" % (sqr_sum_linear, std, max_eigVec))
+    #print("ratio: " + str(sqr_sum_linear/sqr_sum_gaussian))
     # linear PCA
+    for i in range(len(sqr_sum_lst_gaussian)):
+        results.append(sqr_sum__lst_linear[i]/sqr_sum_lst_gaussian[i])
+print("Std: " + str(std))
+
+print(sqr_sum_lst_gaussian)
+print(sqr_sum__lst_linear)
+fileName="std_"+str(std) +".txt"
+np.savetxt(fileName, results, delimiter=' & ', fmt='%2.2e', newline=' \\\\\n')
