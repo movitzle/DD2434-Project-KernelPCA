@@ -1,8 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plot
 import math
-import multiprocessing
-import matplotlib.cm as cm
+import sys
+import pprint
 
 
 
@@ -252,11 +251,15 @@ class Gaussian_Kernel(kernelPCA):
         :param z_init:
         :return:
         """
+        pp = pprint.PrettyPrinter(indent=4)
         z_kernel = self.projection_kernel(training_data,z_init,C) #This is not centered? Should it be?
         z_num = np.dot(np.multiply(gamma, z_kernel), training_data)
         z_den = np.sum(np.multiply(gamma, z_kernel), axis=1)
         if len(np.where(z_den == 0)[0]) > 0:
             print('divide by zero!')
+            print(np.sum(gamma,axis=1))
+            print(z_den)
+            sys.exit(0)
         return np.divide(z_num, np.repeat(np.matrix(z_den).transpose(), nDim, axis=1))
 
 

@@ -41,9 +41,10 @@ class kPCA_toy:
 
             # approximate input
             gamma = self.kPCA_gaussian.gamma_weights(norm_vec, projection_matrix, max_eigVec)
+
             # np.random.seed(20)
             # z_init = np.random.rand(self.nClusters * self.nTestPoints, self.nDim)
-            z_init = self.test_data  # according to first section under chapter 4,
+            z_init = self.test_data +  10*np.random.rand(self.nTestPoints*self.nClusters,self.nDim)  # according to first section under chapter 4,
             # in de-noising we can use the test points as starting guess
             z_init_old = np.zeros(z_init.shape)
             max_distance = 1
@@ -120,8 +121,9 @@ class kPCA_toy:
 
 if __name__ == "__main__":
     # std=float(sys.argv[1])
-    std = 0.1
-    results = []
+    std = 0.8
+    results_sciKit_linear = []
+    results_our_linear=[]
     # create data
     # choose mean uniformly between [-1,1]
     nDimension = 10
@@ -129,38 +131,33 @@ if __name__ == "__main__":
     nTrainingPoints = 100
     nTestPoints = 33
 
-    max_eigVec_lst = [1]
-    # max_eigVec_lst = [10]
-    convergence_threshold = 0.01
+    max_eigVec_lst = [1,2,3,4,5,6,7,8,9]
+    convergence_threshold = 0.5
     mean = np.random.uniform(-1, 1, nClusters * nDimension).reshape([nClusters, nDimension])
     var = std ** 2
     var_matrix = np.zeros((nClusters, nDimension, nDimension), dtype=float)
     # create class object
     for j in range(nClusters):
         var_matrix[j, :, :] = (var * np.eye(nDimension, dtype=float))
+
+    #our Gaussian kPCA
     kPCAtoy = kPCA_toy(mean, var_matrix, 2 * var, nClusters, nTrainingPoints, nTestPoints, nDimension)
     sqr_sum_lst_gaussian = kPCAtoy.kernelPCA_sum_gaussian(max_eigVec_lst,convergence_threshold)
-    print("Our kpca %f" % sqr_sum_lst_gaussian[0])
-    x_inv = kPCAtoy.scikit_kpca(max_eigVec_lst[0])
-    mean_sqr_sum_tmp = 0
-    for i in range(kPCAtoy.nClusters):
-        for j in range(kPCAtoy.nTestPoints):
-            mean_sqr_sum_tmp += (np.linalg.norm(x_inv[i * kPCAtoy.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
 
-    sqr_sum_lst_scikit = [mean_sqr_sum_tmp]
-    print("SCIKIT kpca: %f" % sqr_sum_lst_scikit[0])
+    #SciKit linear PCA
+    sqr_sum__lst_scikit_linear=[]
+    for i in range(len(max_eigVec_lst)):
+        x_inv = kPCAtoy.scikit_lpca(max_eigVec_lst[i])
+        mean_sqr_sum_tmp = 0
+        for i in range(kPCAtoy.nClusters):
+            for j in range(kPCAtoy.nTestPoints):
+                mean_sqr_sum_tmp += (np.linalg.norm(x_inv[i * kPCAtoy.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
 
-    x_inv = kPCAtoy.scikit_lpca(max_eigVec_lst[0])
-    mean_sqr_sum_tmp = 0
-    for i in range(kPCAtoy.nClusters):
-        for j in range(kPCAtoy.nTestPoints):
-            mean_sqr_sum_tmp += (np.linalg.norm(x_inv[i * kPCAtoy.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
-
-    sqr_sum__lst_sickit_linear = [mean_sqr_sum_tmp]
-    print("SCIKI LPCA %f" % sqr_sum__lst_sickit_linear[0])
-
+        sqr_sum__lst_scikit_linear.append(mean_sqr_sum_tmp)
+    #print("SCIKI LPCA %f" % sqr_sum__lst_sickit_linear[0])
+    #Our linear kPCA
     sqr_sum__lst_linear = kPCAtoy.linearPCA(max_eigVec_lst)
-    print("OUR LPCA %f" % sqr_sum__lst_linear[0])
+    #print("OUR LPCA %f" % sqr_sum__lst_linear[0])
     # max_eigVec_lst = [400]
     # sqr_sum_linear_2 = kPCAtoy.kernelPCA_sum_linear(max_eigVec_lst)
     # print(sqr_sum_linear_2)
@@ -169,8 +166,12 @@ if __name__ == "__main__":
     # print("ratio: " + str(sqr_sum_linear/sqr_sum_gaussian))
     # linear PCA
     for i in range(len(sqr_sum_lst_gaussian)):
-        results.append(sqr_sum__lst_linear[i] / sqr_sum_lst_gaussian[i])
-
-print(sqr_sum__lst_linear[0] / sqr_sum_lst_gaussian[0])
-fileName = "std_" + str(std) + ".txt"
-np.savetxt(fileName, results, delimiter=' & ', fmt='%2.2e', newline=' \\\\\n')
+        results_sciKit_linear.append(sqr_sum__lst_scikit_linear[i] / sqr_sum_lst_gaussian[i])
+        results_our_linear.append(sqr_sum__lst_linear[i]/sqr_sum_lst_gaussian[i])
+    print("Result using sciKit linear PCA")
+    print(results_sciKit_linear)
+    print ("Result using our linear PCA")
+    print(results_our_linear)
+    #fileName = "std_" + str(std) + ".txt"
+    #np.savetxt(fileName, results, delimiter=' & ', fmt='%2.2e', newline=' \\\\\n')
+    #print("Our kpca %f" % sqr_sum_lst_gaussian[0])
