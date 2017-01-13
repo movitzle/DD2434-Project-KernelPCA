@@ -63,6 +63,42 @@ class kPCA_toy:
 
         return mean_sqr_sum_lst
 
+    def kernelPCA_sum_gaussian_single(self, max_eigVec_lst, threshold):
+        # create Projection matrix for all test points and for each max_eigVec
+        kGram, norm_vec = self.kPCA_gaussian.normalized_eigenVectors(self.training_data, self.C)
+        projection_kernel = self.kPCA_gaussian.projection_kernel(self.training_data, self.test_data, self.C)
+        projection_matrix_centered = self.kPCA_gaussian.projection_centering(kGram, projection_kernel)
+        mean_sqr_sum_lst = []
+        for max_eigVec in max_eigVec_lst:
+            print(max_eigVec)
+            projection_matrix = np.dot(projection_matrix_centered, norm_vec[:, :max_eigVec])
+
+            # approximate input
+            gamma = self.kPCA_gaussian.gamma_weights(norm_vec, projection_matrix, max_eigVec)
+            # np.random.seed(20)
+            # z_init = np.random.rand(self.nClusters * self.nTestPoints, self.nDim)
+            z_init = self.test_data  # according to first section under chapter 4,
+            # in de-noising we can use the test points as starting guess
+            z_init_old = np.zeros(z_init.shape)
+            for tp in range(self.nTestPoints):
+                max_distance = 1
+                while max_distance > threshold:
+                    try:
+                        approx_z = self.kPCA_gaussian.approximate_z_single(gamma[tp, :], z_init[tp, :], self.training_data,
+                                                                           self.C, self.nDim)
+                    except ValueError:
+                        approx_z = self.kPCA_gaussian.approximate_z_single(gamma[tp, :], z_init[tp-1, :], self.training_data,
+                                                                           self.C, self.nDim)
+                    max_distance = (np.linalg.norm(z_init[tp, :] - approx_z, axis=1, ord=2))
+
+                    z_init[tp, :] = approx_z
+                    # print(max_distance)
+                # calculate the mean square distance from cluster center of each point
+            z_proj = z_init
+            mean_sqr_sum_lst.append(self.calc_mean_sqr_sum(z_proj))
+
+        return mean_sqr_sum_lst
+
     def kernelPCA_sum_linear(self, max_eigVec_lst):
         """
         De-noises test data using a Linear Kernel and direct projection
@@ -80,15 +116,19 @@ class kPCA_toy:
         for max_eigVec in max_eigVec_lst:
             projection_matrix = np.dot(projection_matrix_centered, norm_vec[:, :max_eigVec])
 
-            z_proj=self.kPCA_linear.approximate_input_data(norm_vec[:, :max_eigVec],self.training_data,projection_matrix)
+            z_proj = self.kPCA_linear.approximate_input_data(norm_vec[:, :max_eigVec], self.training_data,
+                                                            projection_matrix)
 
-            mean_sqr_sum = 0
-            for i in range(self.nClusters):
-                for j in range(self.nTestPoints):
-                    mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
-            mean_sqr_sum_lst.append(mean_sqr_sum)
+            mean_sqr_sum_lst.append(self.calc_mean_sqr_sum(z_proj))
+
         return mean_sqr_sum_lst
 
+    def calc_mean_sqr_sum(self, z_proj):
+        mean_sqr_sum = 0
+        for i in range(self.nClusters):
+            for j in range(self.nTestPoints):
+                mean_sqr_sum += (np.linalg.norm(z_proj[i * self.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
+        return mean_sqr_sum
 
     def linearPCA(self, max_eigVec_lst):
         mean_sqr_sum_lst = []
@@ -121,28 +161,46 @@ class kPCA_toy:
 
 if __name__ == "__main__":
     # std=float(sys.argv[1])
-    std = 0.8
-    results_sciKit_linear = []
-    results_our_linear=[]
+
+    std = 0.05
+    results = []
     # create data
     # choose mean uniformly between [-1,1]
     nDimension = 10
     nClusters = 11
     nTrainingPoints = 100
     nTestPoints = 33
-
-    max_eigVec_lst = [1,2,3,4,5,6,7,8,9]
-    convergence_threshold = 0.5
+    max_eigVec_lst = [4]
+    # max_eigVec_lst = [10]
+    convergence_threshold = 0.01
     mean = np.random.uniform(-1, 1, nClusters * nDimension).reshape([nClusters, nDimension])
     var = std ** 2
-    var_matrix = np.zeros((nClusters, nDimension, nDimension), dtype=float)
+    var_matrix = np.zeros((nClusters, nDimension, nDimension), dtype=np.float64)
     # create class object
     for j in range(nClusters):
-        var_matrix[j, :, :] = (var * np.eye(nDimension, dtype=float))
 
-    #our Gaussian kPCA
+        var_matrix[j, :, :] = (var * np.eye(nDimension, dtype=np.float64))
     kPCAtoy = kPCA_toy(mean, var_matrix, 2 * var, nClusters, nTrainingPoints, nTestPoints, nDimension)
-    sqr_sum_lst_gaussian = kPCAtoy.kernelPCA_sum_gaussian(max_eigVec_lst,convergence_threshold)
+
+    sqr_sum_lst_gaussian = kPCAtoy.kernelPCA_sum_gaussian_single(max_eigVec_lst, convergence_threshold)
+    print("Our kpca %f" % sqr_sum_lst_gaussian[0])
+    x_inv = kPCAtoy.scikit_kpca(max_eigVec_lst[0])
+    mean_sqr_sum_tmp = 0
+    for i in range(kPCAtoy.nClusters):
+        for j in range(kPCAtoy.nTestPoints):
+            mean_sqr_sum_tmp += (np.linalg.norm(x_inv[i * kPCAtoy.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
+
+    sqr_sum_lst_scikit = [mean_sqr_sum_tmp]
+    print("SCIKIT kpca: %f" % sqr_sum_lst_scikit[0])
+
+    x_inv = kPCAtoy.scikit_lpca(max_eigVec_lst[0])
+    mean_sqr_sum_tmp = 0
+    for i in range(kPCAtoy.nClusters):
+        for j in range(kPCAtoy.nTestPoints):
+            mean_sqr_sum_tmp += (np.linalg.norm(x_inv[i * kPCAtoy.nTestPoints + j, :] - mean[i, :], ord=2) ** 2)
+
+    sqr_sum__lst_sickit_linear = [mean_sqr_sum_tmp]
+    print("SCIKI LPCA %f" % sqr_sum__lst_sickit_linear[0])
 
     #SciKit linear PCA
     sqr_sum__lst_scikit_linear=[]

@@ -4,8 +4,6 @@ import sys
 import pprint
 
 
-
-
 class kernelPCA:
     """
     KernelPCA class to define basic functionality.
@@ -35,7 +33,7 @@ class kernelPCA:
         :param nDimension: dimension of data in each cluster
         :return: complete dataset
         """
-        dataset = np.zeros((nClusters, nPoints, nDimension), dtype=float)
+        dataset = np.zeros((nClusters, nPoints, nDimension), dtype=np.float64)
         for i in range(nClusters):
             cov = std[i] ** 2
             dataset[i, :, :] = np.random.multivariate_normal(mean[i], cov, nPoints)
@@ -55,7 +53,6 @@ class kernelPCA:
 
         return plt
 
-
     def Kernel_Gram(self, dataset, C):
         """
         Return gaussian or linear kernel gram matrix for given dataset and sigma value
@@ -65,7 +62,7 @@ class kernelPCA:
         :return: gram matrix K
         """
         N = dataset.shape[0]
-        K = np.zeros((N, N), dtype=float)
+        K = np.zeros((N, N), dtype=np.float64)
         XX, YY = np.meshgrid(list(range(N)), list(range(N)))
         XX = XX.reshape([N * N, 1])
         YY = YY.reshape([N * N, 1])
@@ -83,7 +80,7 @@ class kernelPCA:
         :return: K_centered
         """
         N = K.shape[0]
-        one_N = np.ones((N, N), dtype=int) / N
+        one_N = np.ones((N, N), dtype=np.float64) / N
         K_centered = K - np.dot(one_N, K) - np.dot(K, one_N) + np.dot(one_N, np.dot(K, one_N))
         return K_centered
 
@@ -95,7 +92,7 @@ class kernelPCA:
         :return: normalized vectors
         """
         N, M = V.shape
-        V_norm = np.zeros((V.shape), dtype=float)
+        V_norm = np.zeros((V.shape), dtype=np.float64)
         for i in range(M):
             V_norm[:, i] = V[:, i] / math.sqrt(abs(L[i]))
 
@@ -111,7 +108,7 @@ class kernelPCA:
         """
         N = dataset.shape[0]
         D = testset.shape[0]
-        K = np.zeros((D, N), dtype=float)
+        K = np.zeros((D, N), dtype=np.float64)
         for i in range(D):
             for j in range(N):
                 K[i, j] = self.kernel(testset[i], dataset[j], C)
@@ -127,8 +124,8 @@ class kernelPCA:
         """
         D, N = projection_kernel.shape
         # one_D = np.ones((D, D), dtype=int) / D
-        one_N = np.ones((N, N), dtype=int) / N
-        one_DN = np.ones((D, N), dtype=int) / N
+        one_N = np.ones((N, N), dtype=np.float64) / N
+        one_DN = np.ones((D, N), dtype=np.float64) / N
         K_centered = projection_kernel - np.dot(one_DN, K) - np.dot(projection_kernel, one_N) + np.dot(one_DN,
                                                                                                        np.dot(K, one_N))
         # K_centered = projection_kernel - np.dot(one_D, projection_kernel) - np.dot(projection_kernel, one_N) + np.dot(one_D, np.dot(projection_kernel, one_N))
@@ -212,14 +209,15 @@ class kernelPCA:
         """
         return np.dot(projection_matrix, (V[:, :nComponents]).transpose())
 
+
 class Gaussian_Kernel(kernelPCA):
     """
     Extending the kernelPCA class with a Gaussian Kernel and Gaussian methods (eq 10 in PCA paper)
     """
+
     def __init__(self):
         self.name = 'GaussianKernel'
         super(Gaussian_Kernel, self).__init__()
-
 
     def kernel(self, x, y, C):
         """
@@ -231,28 +229,29 @@ class Gaussian_Kernel(kernelPCA):
         """
         return math.exp(-(np.linalg.norm((x - y), ord=2) ** 2) / C)
 
-    #deprecate
+    # deprecate
     def zKernel(self, z_init):
         """
         Calculate Gaussian kernel k(z_init, dataset)
         :param z_init:
         :return:
         """
-        z_kernel = np.zeros((self.nClusters*self.nTestPoints, self.nClusters*self.nTrainingPoints), dtype=float)
-        for i in range(self.nClusters*self.nTestPoints):
-            for j in range(self.nClusters*self.nTrainingPoints):
+        z_kernel = np.zeros((self.nClusters * self.nTestPoints, self.nClusters * self.nTrainingPoints),
+                            dtype=np.float64)
+        for i in range(self.nClusters * self.nTestPoints):
+            for j in range(self.nClusters * self.nTrainingPoints):
                 z_kernel[i, j] = self.kernel(z_init[i, :], self.training_data[j, :], self.C)
         return z_kernel
 
-    def approximate_input_data(self, gamma, z_init,training_data,C,nDim):
+    def approximate_input_data(self, gamma, z_init, training_data, C, nDim):
         """
         Return updated value of approximated input data z_(t+1)
         :param gamma:
         :param z_init:
         :return:
         """
-        pp = pprint.PrettyPrinter(indent=4)
-        z_kernel = self.projection_kernel(training_data,z_init,C) #This is not centered? Should it be?
+
+        z_kernel = self.projection_kernel(training_data, z_init, C)  # This is not centered? Should it be?
         z_num = np.dot(np.multiply(gamma, z_kernel), training_data)
         z_den = np.sum(np.multiply(gamma, z_kernel), axis=1)
         if len(np.where(z_den == 0)[0]) > 0:
@@ -262,16 +261,31 @@ class Gaussian_Kernel(kernelPCA):
             sys.exit(0)
         return np.divide(z_num, np.repeat(np.matrix(z_den).transpose(), nDim, axis=1))
 
+    def approximate_z_single(self, gamma, z_s, training_data, C, nDim):
+        """
+        Return updated value of approximated input data z_(t+1)
+        :param gamma:
+        :param z_init:
+        :return:
+        """
+        z_kernel = self.projection_kernel(training_data, np.matrix(z_s), C)  # This is not centered? Should it be?
+        z_num = np.dot(np.multiply(gamma, z_kernel), training_data)
+        z_den = np.sum(np.multiply(gamma, z_kernel), axis=1)
+        if z_den == 0:
+            raise ValueError
+        return np.divide(z_num, np.repeat(np.matrix(z_den).transpose(), nDim, axis=1))
+
 
 class Linear_Kernel(kernelPCA):
     """
     Extends kernelPCA class with a linear kernel and linear approximation methods.
     """
+
     def __init__(self):
         self.name = 'LinearKernel'
         super(Linear_Kernel, self).__init__()
 
-    def kernel(self,x,y,C):
+    def kernel(self, x, y, C):
         """
         Return value of Linear kernel function
         :param x: vector
@@ -279,9 +293,9 @@ class Linear_Kernel(kernelPCA):
         :param C: optional constant
         :return: value k(x,x') = x x'(^T)-c
         """
-        return np.dot(x,y.transpose())#-C
+        return np.dot(x, y.transpose())  # -C
 
-    def approximate_input_data(self,eigvec,X,beta):
+    def approximate_input_data(self, eigvec, X, beta):
         """
         project data (in input space) on the eigenvectors of linear PCA
         :param eigvec: alpha in PCA paper
@@ -289,10 +303,10 @@ class Linear_Kernel(kernelPCA):
         :param beta: beta in PCA paper
         :return: projected points
         """
-        V=np.dot(eigvec.transpose(),X)
-        projection=np.zeros((beta.shape[0],V.shape[1]), dtype=float)
+        V = np.dot(eigvec.transpose(), X)
+        projection = np.zeros((beta.shape[0], V.shape[1]), dtype=np.float64)
         for i in range(beta.shape[0]):
             for j in range(beta.shape[1]):
-                projection[i]+=beta[i][j]*V[j,:]
+                projection[i] += beta[i][j] * V[j, :]
 
         return projection
